@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const { sendPasswordResetEmail } = require('../utils/email');
+const Booking = require('../models/Booking');
 
 // Register new user
 router.post('/register', async (req, res) => {
@@ -214,6 +215,97 @@ router.post('/request-role-change', auth, async (req, res) => {
   } catch (error) {
     console.error('Error requesting role change:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Change password
+router.post('/change-password', auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    // Find user by ID and explicitly select the password field
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if the current password matches
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect current password' });
+    }
+
+    // Hash the new password (assuming your User model has a pre-save hook for hashing)
+    user.password = newPassword; // The pre-save hook will hash this
+
+    // Clear any password reset tokens (optional, but good practice)
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ message: 'Server error changing password' });
+  }
+});
+
+// Get user stats (weekly usage and active bookings count)
+router.get('/me/stats', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Calculate the start and end of the current week (assuming week starts on Monday)
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Adjust to start week on Monday
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+    endOfWeek.setHours(0, 0, 0, 0); // End of the week (exclusive)
+
+    // Find completed bookings this week for weekly usage calculation
+    const completedBookingsThisWeek = await Booking.find({
+      $or: [{ createdBy: userId }, { participants: userId }],
+      status: 'completed',
+      endTime: { $gte: startOfWeek, $lt: endOfWeek }
+    });
+
+    // Calculate total weekly usage duration in minutes
+    let totalWeeklyUsageMinutes = 0;
+    completedBookingsThisWeek.forEach(booking => {
+      if (booking.startTime && booking.endTime) {
+        const startTime = new Date(booking.startTime);
+        const endTime = new Date(booking.endTime);
+        const durationMs = endTime.getTime() - startTime.getTime();
+        totalWeeklyUsageMinutes += Math.round(durationMs / (1000 * 60)); // Convert ms to minutes
+      }
+    });
+
+    // Find active and upcoming bookings for active bookings count
+    const activeUpcomingBookings = await Booking.countDocuments({
+      $or: [{ createdBy: userId }, { participants: userId }],
+      status: { $in: ['scheduled', 'in-progress'] }
+    });
+
+    // Assuming a fixed weekly limit for now
+    const weeklyLimitHours = 6;
+    const weeklyLimitMinutes = weeklyLimitHours * 60;
+
+    res.json({
+      totalWeeklyUsageMinutes,
+      weeklyLimitMinutes,
+      activeBookingsCount: activeUpcomingBookings
+    });
+
+  } catch (error) {
+    console.error('Error fetching user stats:', error);
+    res.status(500).json({ message: 'Server error fetching user stats' });
   }
 });
 
