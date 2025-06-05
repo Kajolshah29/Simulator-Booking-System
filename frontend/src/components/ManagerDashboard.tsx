@@ -1,50 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Calendar } from 'lucide-react';
-import AddEmployeeDialog from './AddEmployeeDialog';
-import BookingCalendar from './BookingCalendar';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Loader2 } from "lucide-react";
-
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-  role: string;
-  department: string;
-  status: string;
-  roleRequest?: string;
-  roleRequestStatus?: string;
-}
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Clock, Play, StopCircle } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 interface Booking {
-  _id: string;
+  id: string;
   title: string;
   startTime: string;
   endTime: string;
+  priority: 'P1' | 'P2' | 'P3' | 'P4';
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   simulator: string;
-  status: string;
-  priority: string;
+  department: string;
   createdBy: {
     name: string;
     email: string;
@@ -53,474 +23,401 @@ interface Booking {
     name: string;
     email: string;
   }>;
+  startedAt?: Date;
+  actualStartTime?: string;
 }
 
-interface OverrideRequest {
-  _id: string;
-  bookingId: string;
-  requesterId: string;
-  requesterName: string;
-  requesterEmail: string;
-  reason: string;
-  status: string;
-  createdAt: string;
+interface SessionHistoryProps {
+  currentUser: {
+    email: string;
+    name: string;
+  } | null;
 }
 
-const ManagerDashboard = () => {
-  const navigate = useNavigate();
-  const [employees, setEmployees] = useState<User[]>([]);
-  const [activeBookings, setActiveBookings] = useState<Booking[]>([]);
-  const [overrideRequests, setOverrideRequests] = useState<OverrideRequest[]>([]);
-  const [showAddEmployee, setShowAddEmployee] = useState(false);
-  const [newEmployee, setNewEmployee] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: '',
-    department: ''
-  });
+const SessionHistory = ({ currentUser }: SessionHistoryProps) => {
+  const [activeSession, setActiveSession] = useState<Booking | null>(null);
+  const [upcomingSessions, setUpcomingSessions] = useState<Booking[]>([]);
+  const [historicalSessions, setHistoricalSessions] = useState<Booking[]>([]);
+  const [sessionTimer, setSessionTimer] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('upcoming');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
+    fetchSessions();
+    const interval = setInterval(fetchSessions, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  useEffect(() => {
+    let timerInterval: NodeJS.Timeout;
+    if (activeSession) {
+      timerInterval = setInterval(() => {
+        setSessionTimer(prev => prev + 1);
+      }, 1000);
     }
+    return () => clearInterval(timerInterval);
+  }, [activeSession]);
 
-    const fetchData = async () => {
-      try {
-        // Fetch employees
-        const employeesResponse = await fetch('http://localhost:5000/api/employee/list', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const employeesData = await employeesResponse.json();
-        setEmployees(employeesData);
-
-        // Fetch active bookings
-        const bookingsResponse = await fetch('http://localhost:5000/api/bookings?status=active', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const bookingsData = await bookingsResponse.json();
-        setActiveBookings(bookingsData);
-
-        // Fetch override requests
-        const overrideResponse = await fetch('http://localhost:5000/api/bookings/override-requests', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const overrideData = await overrideResponse.json();
-        setOverrideRequests(overrideData);
-
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Error loading dashboard data');
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [navigate]);
-
-  const handleAddEmployee = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
+  const fetchSessions = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/employee/add', {
-        method: 'POST',
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to view your sessions",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const response = await fetch('http://localhost:5000/api/bookings', {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(newEmployee)
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message);
+        if (response.status === 401) {
+          toast({
+            title: "Authentication Error",
+            description: "Your session has expired. Please log in again.",
+            variant: "destructive"
+          });
+          // Optionally redirect to login page
+          return;
+        }
+        throw new Error(`Failed to fetch sessions: ${response.statusText}`);
       }
 
       const data = await response.json();
-      setEmployees([...employees, data.user]);
-      setShowAddEmployee(false);
-      setNewEmployee({
-        name: '',
-        email: '',
-        password: '',
-        role: '',
-        department: ''
+      
+      // Filter sessions for current user and categorize by status
+      const userSessions = data.filter((booking: Booking) => {
+        const isCreator = booking.createdBy?.email === currentUser?.email;
+        const isParticipant = booking.participants?.some(p => p.email === currentUser?.email);
+        return isCreator || isParticipant;
       });
-      toast.success('Employee added successfully');
+
+      const active = userSessions.find((session: Booking) => session.status === 'in-progress');
+      const upcoming = userSessions
+        .filter((session: Booking) => session.status === 'scheduled')
+        .sort((a: Booking, b: Booking) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+      const historical = userSessions
+        .filter((session: Booking) => session.status === 'completed' || session.status === 'cancelled')
+        .sort((a: Booking, b: Booking) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()); // Sort historical by most recent first
+
+      setActiveSession(active || null);
+      setUpcomingSessions(upcoming);
+      setHistoricalSessions(historical);
     } catch (error) {
-      console.error('Error adding employee:', error);
-      toast.error(error instanceof Error ? error.message : 'Error adding employee');
+      console.error('Error fetching sessions:', error);
+      
+      // Check if it's a network error
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        toast({
+          title: "Connection Error",
+          description: "Could not connect to the server. Please check if the backend server is running.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load sessions",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleApproveOverride = async (requestId: string) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
+  const startSession = async (booking: Booking) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/bookings/override-requests/${requestId}/approve`, {
-        method: 'POST',
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`http://localhost:5000/api/bookings/${booking.id}`, {
+        method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...booking,
+          status: 'in-progress',
+          startedAt: new Date()
+        })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to approve override request');
-      }
+      if (!response.ok) throw new Error('Failed to start session');
 
-      setOverrideRequests(overrideRequests.filter(req => req._id !== requestId));
-      toast.success('Override request approved');
+      setActiveSession({
+        ...booking,
+        status: 'in-progress',
+        startedAt: new Date()
+      });
+      setSessionTimer(0);
+      
+      toast({
+        title: "Session Started",
+        description: `Your ${booking.priority} session has begun.`
+      });
+
+      fetchSessions();
     } catch (error) {
-      console.error('Error approving override:', error);
-      toast.error('Error approving override request');
+      console.error('Error starting session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start session",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleRejectOverride = async (requestId: string) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
+  const endSession = async () => {
+    if (!activeSession) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/bookings/override-requests/${requestId}/reject`, {
-        method: 'POST',
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`http://localhost:5000/api/bookings/${activeSession.id}`, {
+        method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...activeSession,
+          status: 'completed'
+        })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to reject override request');
-      }
+      if (!response.ok) throw new Error('Failed to end session');
 
-      setOverrideRequests(overrideRequests.filter(req => req._id !== requestId));
-      toast.success('Override request rejected');
+      setActiveSession(null);
+      setSessionTimer(0);
+      
+      toast({
+        title: "Session Ended",
+        description: "Your session has been completed."
+      });
+
+      fetchSessions();
     } catch (error) {
-      console.error('Error rejecting override:', error);
-      toast.error('Error rejecting override request');
+      console.error('Error ending session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to end session",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'P1': return 'bg-red-500';
+      case 'P2': return 'bg-orange-500';
+      case 'P3': return 'bg-blue-500';
+      case 'P4': return 'bg-green-500';
+      default: return 'bg-gray-500';
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white"></div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Manager Dashboard</h1>
-      
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="employees">Employee Management</TabsTrigger>
-          <TabsTrigger value="bookings">Active Bookings</TabsTrigger>
-          <TabsTrigger value="overrides">Override Requests</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+    <div className="space-y-6">
+      {/* Active Session */}
+      {activeSession ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Clock className="w-5 h-5" />
+              <span>Active Session</span>
+            </CardTitle>
+            <CardDescription>
+              Your current simulator session
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">{activeSession.title}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {new Date(activeSession.startTime).toLocaleString()} - {new Date(activeSession.endTime).toLocaleString()}
+                  </p>
+                </div>
+                <Badge className={getPriorityColor(activeSession.priority)}>
+                  {activeSession.priority}
+                </Badge>
+              </div>
+              
+              <div className="text-center py-4">
+                <div className="text-3xl font-mono">{formatTime(sessionTimer)}</div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Session Duration</p>
+              </div>
+
+              <Button 
+                onClick={endSession}
+                className="w-full"
+                variant="destructive"
+              >
+                <StopCircle className="w-4 h-4 mr-2" />
+                End Session
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Clock className="w-5 h-5" />
+              <span>No Active Session</span>
+            </CardTitle>
+            <CardDescription>
+              You can start a session when your booking time arrives
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No session currently running</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Session Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{employees.length}</div>
-              </CardContent>
-            </Card>
-             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{activeBookings.length}</div>
-              </CardContent>
-            </Card>
-             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{overrideRequests.length}</div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="employees">
+        {/* Upcoming Sessions Tab */}
+        <TabsContent value="upcoming" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Employee Management</CardTitle>
-              <Button onClick={() => setShowAddEmployee(true)}>Add New Employee</Button>
+              <CardTitle className="flex items-center space-x-2">
+                <Clock className="w-5 h-5" />
+                <span>Upcoming Sessions</span>
+              </CardTitle>
+              <CardDescription>
+                Your scheduled simulator sessions
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employees.map((employee) => (
-                    <TableRow key={employee._id}>
-                      <TableCell>{employee.name}</TableCell>
-                      <TableCell>{employee.email}</TableCell>
-                      <TableCell>{employee.role}</TableCell>
-                      <TableCell>{employee.department}</TableCell>
-                      <TableCell>{employee.status}</TableCell>
-                      <TableCell>
-                        {employee.roleRequest && (
-                          <div className="space-x-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleApproveRequest(employee._id)}
-                              disabled={employee.roleRequestStatus === 'approved'}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleRejectRequest(employee._id)}
-                              disabled={employee.roleRequestStatus === 'rejected'}
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="bookings">
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Bookings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Simulator</TableHead>
-                    <TableHead>Start Time</TableHead>
-                    <TableHead>End Time</TableHead>
-                    <TableHead>Created By</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activeBookings.map((booking) => (
-                    <TableRow key={booking._id}>
-                      <TableCell>{booking.title}</TableCell>
-                      <TableCell>{booking.simulator}</TableCell>
-                      <TableCell>{new Date(booking.startTime).toLocaleString()}</TableCell>
-                      <TableCell>{new Date(booking.endTime).toLocaleString()}</TableCell>
-                      <TableCell>{booking.createdBy.name}</TableCell>
-                      <TableCell>{booking.status}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="overrides">
-          <Card>
-            <CardHeader>
-              <CardTitle>Override Requests</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Requester</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {overrideRequests.map((request) => (
-                    <TableRow key={request._id}>
-                      <TableCell>{request.requesterName}</TableCell>
-                      <TableCell>{request.reason}</TableCell>
-                      <TableCell>{new Date(request.createdAt).toLocaleString()}</TableCell>
-                      <TableCell>{request.status}</TableCell>
-                      <TableCell>
-                        <div className="space-x-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleApproveOverride(request._id)}
-                            disabled={request.status !== 'pending'}
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleRejectOverride(request._id)}
-                            disabled={request.status !== 'pending'}
-                          >
-                            Reject
-                          </Button>
+              {upcomingSessions.length > 0 ? (
+                <div className="space-y-4">
+                  {upcomingSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <Badge className={getPriorityColor(session.priority)}>
+                            {session.priority}
+                          </Badge>
+                          <span className="font-medium">{session.title}</span>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {new Date(session.startTime).toLocaleString()} - {new Date(session.endTime).toLocaleString()}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Simulator: {session.simulator}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => startSession(session)}
+                        className="flex items-center space-x-2"
+                      >
+                        <Play className="w-4 h-4" />
+                        <span>Start Session</span>
+                      </Button>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p>No upcoming sessions scheduled</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="settings">
-            <Card>
-              <CardHeader>
-              <CardTitle>Settings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                  <div className="space-y-4">
-                          <div>
-                  <Label>Department Name</Label>
-                  <Input defaultValue="Engineering" />
-                          </div>
-                <div>
-                  <Label>Email Notifications</Label>
-                  <Select defaultValue="all">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select notification type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Notifications</SelectItem>
-                      <SelectItem value="important">Important Only</SelectItem>
-                      <SelectItem value="none">None</SelectItem>
-                    </SelectContent>
-                  </Select>
-                        </div>
-                <Button>Save Settings</Button>
-                  </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-      {showAddEmployee && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <Card className="w-[500px]">
+        {/* Session History Tab */}
+        <TabsContent value="history" className="space-y-4">
+          <Card>
             <CardHeader>
-              <CardTitle>Add New Employee</CardTitle>
+              <CardTitle className="flex items-center space-x-2">
+                <Clock className="w-5 h-5" />
+                <span>Session History</span>
+              </CardTitle>
+              <CardDescription>
+                Your completed and cancelled simulator sessions
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleAddEmployee} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={newEmployee.name}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-                    required
-                  />
+              {historicalSessions.length > 0 ? (
+                <div className="space-y-4">
+                  {historicalSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <Badge className={getPriorityColor(session.priority)}>
+                            {session.priority}
+                          </Badge>
+                          <span className="font-medium">{session.title}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {new Date(session.startTime).toLocaleString()} - {new Date(session.endTime).toLocaleString()}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Simulator: {session.simulator}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Status: {session.status}
+                        </p>
+                      </div>
+                      {/* No buttons for historical sessions */}
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={newEmployee.email}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-                    required
-                  />
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p>No historical sessions found</p>
                 </div>
-                <div>
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={newEmployee.password}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={newEmployee.role}
-                    onValueChange={(value) => setNewEmployee({ ...newEmployee, role: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="P1">P1</SelectItem>
-                      <SelectItem value="P2">P2</SelectItem>
-                      <SelectItem value="P3">P3</SelectItem>
-                      <SelectItem value="P4">P4</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="department">Department</Label>
-                  <Input
-                    id="department"
-                    value={newEmployee.department}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setShowAddEmployee(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Add Employee</Button>
-                </div>
-              </form>
+              )}
             </CardContent>
           </Card>
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
 
-export default ManagerDashboard;
+export default SessionHistory; 
