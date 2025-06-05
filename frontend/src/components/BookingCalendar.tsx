@@ -99,7 +99,7 @@ const BookingCalendar = ({ currentUser }: BookingCalendarProps) => {
     }
   }, [selectedDate, currentUser]); // Add currentUser to dependency array
 
-  const handleBooking = () => {
+  const handleBooking = async () => {
     if (!selectedDate || !selectedTime || !selectedPriority || !duration) {
       toast({
         title: "Missing Information",
@@ -122,23 +122,86 @@ const BookingCalendar = ({ currentUser }: BookingCalendarProps) => {
       return;
     }
 
-    // TODO: Implement actual booking creation API call
-    console.log('Attempting to book:', { selectedDate, selectedTime, selectedPriority, duration });
+    // Calculate end time
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const startTime = new Date(selectedDate);
+    startTime.setHours(hours, minutes, 0, 0);
 
-    // Simulate booking success (replace with actual API call and response handling)
-    toast({
-      title: "Booking Confirmed!",
-      description: `Your ${selectedPriority} session is booked for ${selectedDate.toDateString()} at ${selectedTime}. (Simulated)`, // Added Simulated for clarity
-    });
+    const endTime = new Date(startTime);
+    endTime.setMinutes(startTime.getMinutes() + parseInt(duration));
 
-    // Reset form
-    setSelectedTime('');
-    setSelectedPriority('');
-    setDuration('60');
+    // Get simulator - assuming a default or selection mechanism exists elsewhere
+    // For now, let's use a placeholder. You might need to adjust this part.
+    const simulator = 'SIM1'; // TODO: Replace with actual simulator selection
 
-    // After successful booking, refetch bookings for the selected date
-    if (selectedDate) {
-       fetchBookings(selectedDate);
+    const bookingData = {
+      // You might need a title and description field in the UI
+      title: `Session on ${selectedDate.toDateString()}`,
+      description: '',
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      simulator: simulator,
+      priority: selectedPriority,
+      // Participants can be added later if needed
+      participants: [], 
+      // Department might need to be fetched from the current user or selected
+      department: 'default' // TODO: Replace with actual department
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to book a session",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setIsLoadingBookings(true); // Use the existing loading state
+
+      const response = await fetch('http://localhost:5000/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bookingData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to book session');
+      }
+
+      const newBooking = await response.json();
+      console.log('Booking created successfully:', newBooking);
+
+      toast({
+        title: "Booking Confirmed!",
+        description: `Your ${newBooking.priority} session on ${new Date(newBooking.startTime).toLocaleString()} has been booked.`, 
+      });
+
+      // Reset form
+      setSelectedTime('');
+      setSelectedPriority('');
+      setDuration('60');
+
+      // After successful booking, refetch bookings for the selected date
+      if (selectedDate) {
+         fetchBookings(selectedDate);
+      }
+
+    } catch (error) {
+      console.error('Error booking session:', error);
+      toast({
+        title: "Booking Error",
+        description: error instanceof Error ? error.message : 'Failed to book session', 
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingBookings(false);
     }
   };
 
