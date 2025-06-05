@@ -1,32 +1,8 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ManagerDashboard from '@/components/ManagerDashboard';
-import AdminOverviewCards from '@/components/AdminOverviewCards';
-import ActiveBookingsTab from '@/components/ActiveBookingsTab';
-import OverrideRequestsTab from '@/components/OverrideRequestsTab';
-import AnalyticsTab from '@/components/AnalyticsTab';
-import SettingsTab from '@/components/SettingsTab';
 
 const AdminDashboard = () => {
-  const [activeBookings] = useState([
-    { id: '1', user: 'John Doe', priority: 'P1', time: '14:00-16:00', status: 'active' },
-    { id: '2', user: 'Jane Smith', priority: 'P2', time: '16:30-18:00', status: 'upcoming' },
-    { id: '3', user: 'Bob Johnson', priority: 'P3', time: '09:00-10:30', status: 'completed' },
-  ]);
-
-  const [overrideRequests] = useState([
-    { id: '1', requester: 'Alice Brown', target: 'John Doe', priority: 'P1', time: '15:00-16:00', status: 'pending' },
-  ]);
-
-  const [analytics] = useState({
-    totalBookings: 156,
-    activeUsers: 23,
-    utilizationRate: 78,
-    averageSession: 85,
-    earlyEndRate: 12
-  });
-
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'P1': return 'bg-red-500';
@@ -49,41 +25,15 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <AdminOverviewCards analytics={analytics} />
-
-      <Tabs defaultValue="bookings" className="space-y-4">
+      <Tabs defaultValue="managers" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="bookings">Active Bookings</TabsTrigger>
-          <TabsTrigger value="overrides">Override Requests</TabsTrigger>
           <TabsTrigger value="managers">Manager Dashboard</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="bookings" className="space-y-4">
-          <ActiveBookingsTab
-            activeBookings={activeBookings}
-            getPriorityColor={getPriorityColor}
-            getStatusColor={getStatusColor}
-          />
-        </TabsContent>
-
-        <TabsContent value="overrides" className="space-y-4">
-          <OverrideRequestsTab overrideRequests={overrideRequests} />
-        </TabsContent>
 
         <TabsContent value="managers" className="space-y-4">
           <div className="animate-fade-in">
             <ManagerDashboard />
           </div>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-4">
-          <AnalyticsTab />
-        </TabsContent>
-
-        <TabsContent value="settings" className="space-y-4">
-          <SettingsTab />
         </TabsContent>
       </Tabs>
     </div>
