@@ -8,6 +8,8 @@ import BookingCalendar from '@/components/BookingCalendar';
 import SessionManager from '@/components/SessionManager';
 import AdminDashboard from '@/components/AdminDashboard';
 import LoginPage from '@/components/LoginPage';
+import SessionHistory from '@/components/SessionHistory';
+import UserProfile from '@/components/UserProfile';
 
 const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -120,18 +122,7 @@ const Index = () => {
 
           <TabsContent value="session" className="space-y-6">
             <div className="animate-fade-in">
-              {currentUser ? (
-                <SessionManager currentUser={currentUser} />
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Please log in to view sessions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p>Your session information will appear here after you log in.</p>
-                  </CardContent>
-                </Card>
-              )}
+              <SessionHistory currentUser={currentUser} />
             </div>
           </TabsContent>
 
@@ -145,50 +136,7 @@ const Index = () => {
 
           <TabsContent value="profile" className="space-y-6">
             <div className="animate-fade-in">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <User className="w-5 h-5" />
-                    <span>User Profile</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Manage your account settings and preferences.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
-                      <User className="w-8 h-8 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">{currentUser?.name}</h3>
-                      <p className="text-gray-500 dark:text-gray-400">{currentUser?.email}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm">Weekly Usage</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold">4.5 / 6 hours</div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">This week</p>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm">Active Bookings</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold">1</div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Upcoming sessions</p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </CardContent>
-              </Card>
+              <UserProfile currentUser={currentUser} />
             </div>
           </TabsContent>
         </Tabs>
