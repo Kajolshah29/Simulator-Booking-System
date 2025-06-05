@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Calendar, BarChart3 } from 'lucide-react';
+import { Users, Calendar } from 'lucide-react';
 import AddEmployeeDialog from './AddEmployeeDialog';
 import BookingCalendar from './BookingCalendar';
 import { useNavigate } from 'react-router-dom';
@@ -25,7 +25,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Loader2 } from "lucide-react";
-import AdminOverviewCards from './AdminOverviewCards';
 
 interface User {
   _id: string;
@@ -67,14 +66,6 @@ interface OverrideRequest {
   createdAt: string;
 }
 
-interface Analytics {
-  totalBookings: number;
-  activeUsers: number;
-  utilizationRate: number;
-  averageSession: number;
-  earlyEndRate: number;
-}
-
 const ManagerDashboard = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState<User[]>([]);
@@ -89,13 +80,6 @@ const ManagerDashboard = () => {
     department: ''
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [analytics, setAnalytics] = useState<Analytics>({
-    totalBookings: 0,
-    activeUsers: 0,
-    utilizationRate: 0,
-    averageSession: 0,
-    earlyEndRate: 0
-  });
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -132,15 +116,6 @@ const ManagerDashboard = () => {
         });
         const overrideData = await overrideResponse.json();
         setOverrideRequests(overrideData);
-
-        // Fetch analytics
-        const analyticsResponse = await fetch('http://localhost:5000/api/analytics', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const analyticsData = await analyticsResponse.json();
-        setAnalytics(analyticsData);
 
         setIsLoading(false);
       } catch (error) {
@@ -264,58 +239,39 @@ const ManagerDashboard = () => {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="employees">Employee Management</TabsTrigger>
           <TabsTrigger value="bookings">Active Bookings</TabsTrigger>
-          <TabsTrigger value="requests">Override Requests</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="overrides">Override Requests</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="space-y-4">
-            <AdminOverviewCards analytics={analytics} />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-                <h2 className="text-xl font-semibold mb-4">Recent Bookings</h2>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Simulator</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeBookings.slice(0, 5).map(booking => (
-                      <TableRow key={booking._id}>
-                        <TableCell>{booking.title}</TableCell>
-                        <TableCell>{booking.simulator}</TableCell>
-                        <TableCell>{booking.status}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-                <h2 className="text-xl font-semibold mb-4">Pending Requests</h2>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Requester</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {overrideRequests.slice(0, 5).map(request => (
-                      <TableRow key={request._id}>
-                        <TableCell>{request.requesterName}</TableCell>
-                        <TableCell>{request.reason}</TableCell>
-                        <TableCell>{request.status}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{employees.length}</div>
+              </CardContent>
+            </Card>
+             <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{activeBookings.length}</div>
+              </CardContent>
+            </Card>
+             <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overrideRequests.length}</div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -408,7 +364,7 @@ const ManagerDashboard = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="requests">
+        <TabsContent value="overrides">
           <Card>
             <CardHeader>
               <CardTitle>Override Requests</CardTitle>
@@ -448,7 +404,7 @@ const ManagerDashboard = () => {
                           >
                             Reject
                           </Button>
-              </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -457,47 +413,6 @@ const ManagerDashboard = () => {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-              <CardTitle>Analytics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                  <div className="space-y-4">
-                <AdminOverviewCards analytics={analytics} />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Total Employees</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-bold">{employees.length}</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Active Bookings</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-bold">{activeBookings.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                      <CardTitle>Pending Requests</CardTitle>
-              </CardHeader>
-              <CardContent>
-                      <p className="text-2xl font-bold">
-                        {overrideRequests.filter(req => req.status === 'pending').length}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
         <TabsContent value="settings">
             <Card>
@@ -583,7 +498,7 @@ const ManagerDashboard = () => {
                       <SelectItem value="P4">P4</SelectItem>
                     </SelectContent>
                   </Select>
-      </div>
+                </div>
                 <div>
                   <Label htmlFor="department">Department</Label>
                   <Input
